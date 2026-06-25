@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Simulador de VAR 3D - Edición Estadio Completo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0b0f19;
+            color: #f8fafc;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            justify-content: center;
+        }
+        h1 { color: #38bdf8; font-size: 24px; margin: 0 0 5px 0; font-weight: 600; }
+        .subtitle { color: #94a3b8; font-size: 13px; margin-bottom: 20px; text-align: center; max-width: 600px; }
+        
+        .main-container {
+            display: flex;
+            flex-direction: row;
+            gap: 24px;
+            align-items: flex-start;
+            justify-content: center;
+            width: 100%;
+            max-width: 1150px;
+        }
+        
+        .canvas-panel {
+            background-color: #1e293b;
+            border-radius: 14px;
+            padding: 15px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+        }
+        canvas {
+            border-radius: 10px;
+            border: 2px solid #475569;
+            display: block;
+        }
+
+        .controls-panel {
+            background-color: #1e293b;
+            border-radius: 14px;
+            padding: 20px;
+            width: 330px;
+            min-width: 330px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 13px;
+            box-sizing: border-box;
+        }
+        .controls-panel h2 { font-size: 16px; margin: 0 0 5px 0; color: #f8fafc; font-weight: 600; border-bottom: 1px solid #334155; padding-bottom: 8px;}
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        label {
+            font-size: 12px;
+            color: #cbd5e1;
+            display: flex;
+            justify-content: space-between;
+            font-weight: 500;
+        }
+        label span { color: #38bdf8; font-weight: 700; }
+        
+        input[type="range"] {
+            width: 100%;
+            accent-color: #38bdf8;
+            cursor: pointer;
+            height: 6px;
+            background: #475569;
+            border-radius: 4px;
+        }
+        
+        .btn-perfect {
+            background-color: #0284c7;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+        .btn-perfect:hover { background-color: #0369a1; }
+        .btn-perfect:active { transform: scale(0.98); }
+        
+        .status-badge {
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 800;
+            text-align: center;
+            letter-spacing: 0.8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+        .offside { background-color: #ef4444; color: white; }
+        .onside { background-color: #22c55e; color: white; }
+    </style>
+</head>
+<body>
+
+    <h1>Simulador Táctico de Cámara VAR 3D</h1>
+    <p class="subtitle">Controla la perspectiva tridimensional del estadio y la posición exacta de las líneas de fuera de juego.</p>
+
+    <div class="main-container">
+        
+        <div class="canvas-panel">
+            <canvas id="varCanvas" width="750" height="500"></canvas>
+        </div>
+
+        <div class="controls-panel">
+            <h2>Configuración de Óptica</h2>
+            
+            <div class="control-group">
+                <label>Ángulo Horizontal (Rotar) <span id="valX">75°</span></label>
+                <input type="range" id="camX" min="15" max="165" value="75">
+            </div>
+
+            <div class="control-group">
+                <label>Ángulo Vertical (Vista Cenital) <span id="valVAngle">25°</span></label>
+                <input type="range" id="camVAngle" min="0" max="90" value="25">
+            </div>
+
+            <div class="control-group">
+                <label>Altura de Cámara (Y) <span id="valY">110</span></label>
+                <input type="range" id="camY" min="30" max="250" value="110">
+            </div>
+
+            <div class="control-group">
+                <label>Zoom de Lente (Distancia Z) <span id="valZ">410</span></label>
+                <input type="range" id="camZ" min="200" max="600" value="410">
+            </div>
+
+            <div class="control-group">
+                <label>Campo de Visión (FOV) <span id="valFov">42°</span></label>
+                <input type="range" id="camFov" min="15" max="75" value="42">
+            </div>
+
+            <h2>Posiciones del Playbook</h2>
+
+            <div class="control-group">
+                <label>Posición del Defensa (Azul) <span id="valDefense">0</span></label>
+                <input type="range" id="defenseX" min="-80" max="80" value="0">
+            </div>
+
+            <div class="control-group">
+                <label>Posición del Delantero (Rojo) <span id="valPlayer">35</span></label>
+                <input type="range" id="playerX" min="-50" max="140" value="35">
+            </div>
+
+            <button class="btn-perfect" id="btnPreset">Vista de Línea Perfecta</button>
+
+            <div id="statusBadge" class="status-badge offside">FUERA DE JUEGO (OFFSIDE)</div>
+        </div>
+
+    </div>
+
+    <script>
+        const canvas = document.getElementById('varCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Captura de nodos del DOM
+        const inputX = document.getElementById('camX');
+        const inputVAngle = document.getElementById('camVAngle');
+        const inputY = document.getElementById('camY');
+        const inputZ = document.getElementById('camZ');
+        const inputFov = document.getElementById('camFov');
+        const inputPlayer = document.getElementById('playerX');
+        const inputDefense = document.getElementById('defenseX');
+
+        const txtX = document.getElementById('valX');
+        const txtVAngle = document.getElementById('valVAngle');
+        const txtY = document.getElementById('valY');
+        const txtZ = document.getElementById('valZ');
+        const txtFov = document.getElementById('valFov');
+        const txtPlayer = document.getElementById('valPlayer');
+        const txtDefense = document.getElementById('valDefense');
+        const badge = document.getElementById('statusBadge');
+
+        let animationTime = 0;
+
+        // --- MATRIZ DE PROYECCIÓN TRIDIMENSIONAL MATEMÁTICA ---
+        function project3D(x, y, z, rotH, rotV, camY, camZ, fov) {
+            // 1. Rotación Horizontal (Yaw)
+            let radH = (rotH - 90) * Math.PI / 180;
+            let x1 = x * Math.cos(radH) - z * Math.sin(radH);
+            let z1 = x * Math.sin(radH) + z * Math.cos(radH);
+            let y1 = y;
+
+            // 2. Rotación Vertical (Pitch)
+            let radV = rotV * Math.PI / 180;
+            let x2 = x1;
+            let y2 = (y1 - camY) * Math.cos(radV) - z1 * Math.sin(radV);
+            let z2 = (y1 - camY) * Math.sin(radV) + z1 * Math.cos(radV);
+
+            // 3. Profundidad focal
+            let depth = camZ - z2;
+            if (depth < 10) depth = 10; 
+
+            let focal = (1.0 / Math.tan((fov * Math.PI) / 360)) * (canvas.height * 0.6);
+            let scale = focal / depth;
+
+            return {
+                x: (canvas.width * 0.46) + (x2 * scale),
+                y: (canvas.height * 0.5) - (y2 * scale)
+            };
+        }
+
+        // --- DIBUJADO DE JUGADORES TIPO MANIQUÍ ARTICULADO VECTORIAL ---
+        function drawMannequin(x, y, z, color, label, isStriker, cX, cV, cY, cZ, fov) {
+            let wave = Math.sin(animationTime * 0.08) * 0.6;
+            let swing = Math.sin(animationTime * 0.15);
+
+            let coreY = y + 22 + wave * 0.2;
+            let chestY = y + 36 + wave * 0.4;
+            let headY = y + 46 + wave * 0.5;
+            let direction = isStriker ? -1 : 1;
+
+            let skeleton = {
+                feet:  {x: x, y: y, z: z},
+                hips:  {x: x, y: coreY, z: z},
+                chest: {x: x, y: chestY, z: z},
+                head:  {x: x, y: headY, z: z},
+                shL:   {x: x, y: chestY, z: z - 6},
+                shR:   {x: x, y: chestY, z: z + 6},
+                elL:   {x: x + (direction * swing * 3), y: chestY - 10, z: z - 8 - (swing * 2)},
+                elR:   {x: x - (direction * swing * 3), y: chestY - 9, z: z + 8 + (swing * 2)},
+                handL: {x: x + (direction * swing * 5) - 3, y: chestY - 6, z: z - 7},
+                handR: {x: x - (direction * swing * 5) + 3, y: chestY - 5, z: z + 7},
+                hipL:  {x: x, y: coreY, z: z - 3},
+                hipR:  {x: x, y: coreY, z: z + 3},
+                kneeL: {x: x + (swing * 5), y: y + 12, z: z - 4},
+                kneeR: {x: x - (swing * 5), y: y + 10, z: z + 4},
+                footL: {x: x + (swing * 8), y: y, z: z - 4},
+                footR: {x: x - (swing * 8), y: y, z: z + 4}
+            };
+
+            let p = {};
+            for (let joint in skeleton) {
+                p[joint] = project3D(skeleton[joint].x, skeleton[joint].y, skeleton[joint].z, cX, cV, cY, cZ, fov);
+            }
+
+            // Sombra del maniquí
+            ctx.fillStyle = 'rgba(0,0,0,0.35)';
+            ctx.beginPath();
+            ctx.ellipse(p.feet.x, p.feet.y, 14 * (1 - cV/130), 5 * (1 - cV/180), 0, 0, 2 * Math.PI);
+            ctx.fill();
+
+            ctx.strokeStyle = color;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // Espina Dorsal
+            ctx.lineWidth = 5;
+            ctx.beginPath(); ctx.moveTo(p.hips.x, p.hips.y); ctx.lineTo(p.chest.x, p.chest.y); ctx.stroke();
+
+            // Estructuras secundarias
+            ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(p.shL.x, p.shL.y); ctx.lineTo(p.shR.x, p.shR.y); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(p.shL.x, p.shL.y); ctx.lineTo(p.elL.x, p.elL.y); ctx.lineTo(p.handL.x, p.handL.y); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(p.shR.x, p.shR.y); ctx.lineTo(p.elR.x, p.elR.y); ctx.lineTo(p.handR.x, p.handR.y); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(p.hipL.x, p.hipL.y); ctx.lineTo(p.hipR.x, p.hipR.y); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(p.hipL.x, p.hipL.y); ctx.lineTo(p.kneeL.x, p.kneeL.y); ctx.lineTo(p.footL.x, p.footL.y); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(p.hipR.x, p.hipR.y); ctx.lineTo(p.kneeR.x, p.kneeR.y); ctx.lineTo(p.footR.x, p.footR.y); ctx.stroke();
+
+            // Cabeza esférica
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            let sizeHead = Math.max(1.5, Math.abs(p.head.y - p.chest.y) * 0.35);
+            ctx.arc(p.head.x, p.head.y, sizeHead, 0, 2 * Math.PI);
+            ctx.fill();
+
+            // Caja informativa flotante
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+            ctx.font = 'bold 10px sans-serif';
+            let textW = ctx.measureText(label).width;
+            ctx.fillRect(p.head.x - (textW/2) - 5, p.head.y - 23, textW + 10, 16);
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.fillText(label, p.head.x, p.head.y - 11);
+        }
+
+        // --- MOTOR GRÁFICO PRINCIPAL ---
+        function frame() {
+            animationTime++;
+
+            // Captura de valores instantáneos de los controles
+            let cX = parseInt(inputX.value);
+            let cV = parseInt(inputVAngle.value);
+            let cY = parseInt(inputY.value);
+            let cZ = parseInt(inputZ.value);
+            let fov = parseInt(inputFov.value);
+            let pX = parseInt(inputPlayer.value);
+            let dX = parseInt(inputDefense.value);
+
+            // Actualización de textos en pantalla
+            txtX.innerText = cX + '°';
+            txtVAngle.innerText = cV + '°';
+            txtY.innerText = cY;
+            txtZ.innerText = cZ;
+            txtFov.innerText = fov + '°';
+            txtPlayer.innerText = pX;
+            txtDefense.innerText = dX;
+
+            // Lógica interactiva de Fuera de Juego
+            if (pX > dX) {
+                badge.innerText = "FUERA DE JUEGO (OFFSIDE)";
+                badge.className = "status-badge offside";
+            } else {
+                badge.innerText = "POSICIÓN LEGAL (ONSIDE)";
+                badge.className = "status-badge onside";
+            }
+
+            // --- 1. DIBUJAR ESTADIO EN PERSPECTIVA ---
+            // Cielo nocturno
+            let skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            skyGrad.addColorStop(0, '#040814');
+            skyGrad.addColorStop(1, '#0f172a');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Graderías/Tribunas del Estadio en 3D
+            for (let r = 0; r < 6; r++) {
+                let rowHeight = 12 + (r * 14);
+                let rowDepth = -210 - (r * 22);
+
+                let st1 = project3D(-380, rowHeight, rowDepth, cX, cV, cY, cZ, fov);
+                let st2 = project3D(380, rowHeight, rowDepth, cX, cV, cY, cZ, fov);
+                let st3 = project3D(380, rowHeight + 14, rowDepth - 22, cX, cV, cY, cZ, fov);
+                let st4 = project3D(-380, rowHeight + 14, rowDepth - 22, cX, cV, cY, cZ, fov);
+
+                ctx.fillStyle = (r % 2 === 0) ? '#1e293b' : '#111827';
+                ctx.strokeStyle = '#334155';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(st1.x, st1.y); ctx.lineTo(st2.x, st2.y); ctx.lineTo(st3.x, st3.y); ctx.lineTo(st4.x, st4.y);
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+            }
+
+            // Torres de iluminación con reflectores artificiales
+            function drawTower(tx, ty, tz) {
+                let tBase = project3D(tx, 0, tz, cX, cV, cY, cZ, fov);
+                let tTop = project3D(tx, ty, tz, cX, cV, cY, cZ, fov);
+
+                // Estructura metálica del poste
+                ctx.strokeStyle = '#475569';
+                ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(tBase.x, tBase.y); ctx.lineTo(tTop.x, tTop.y); ctx.stroke();
+
+                // Cono de iluminación volumétrico translúcido
+                if(cV < 85) {
+                    let coneGrad = ctx.createLinearGradient(tTop.x, tTop.y, canvas.width/2, canvas.height/2);
+                    coneGrad.addColorStop(0, 'rgba(254, 240, 138, 0.2)');
+                    coneGrad.addColorStop(1, 'rgba(254, 240, 138, 0)');
+                    ctx.fillStyle = coneGrad;
+                    ctx.beginPath();
+                    ctx.moveTo(tTop.x, tTop.y);
+                    ctx.lineTo(tTop.x - 90, tTop.y + 240);
+                    ctx.lineTo(tTop.x + 90, tTop.y + 240);
+                    ctx.closePath(); ctx.fill();
+                }
+
+                // Foco encendido
+                let glow = ctx.createRadialGradient(tTop.x, tTop.y, 1, tTop.x, tTop.y, 25);
+                glow.addColorStop(0, '#ffffff');
+                glow.addColorStop(0.3, '#fef08a');
+                glow.addColorStop(1, 'rgba(255,255,255,0)');
+                ctx.fillStyle = glow;
+                ctx.beginPath(); ctx.arc(tTop.x, tTop.y, 25, 0, 2 * Math.PI); ctx.fill();
+            }
+            drawTower(-290, 120, -200);
+            drawTower(290, 120, -200);
+
+            // --- 2. TEXTURIZADO Y LÍNEAS DE LA CANCHA ---
+            let fieldL = 280;
+            let fieldW = 180;
+            let stripeStep = 45;
+
+            // Césped bicolor cortado a franjas
+            for (let xPos = -fieldL; xPos < fieldL; xPos += stripeStep) {
+                ctx.fillStyle = (Math.floor((xPos + fieldL) / stripeStep) % 2 === 0) ? '#166534' : '#14532d';
+                
+                let pt1 = project3D(xPos, 0, -fieldW, cX, cV, cY, cZ, fov);
+                let pt2 = project3D(xPos + stripeStep, 0, -fieldW, cX, cV, cY, cZ, fov);
+                let pt3 = project3D(xPos + stripeStep, 0, fieldW, cX, cV, cY, cZ, fov);
+                let pt4 = project3D(xPos, 0, fieldW, cX, cV, cY, cZ, fov);
+
+                ctx.beginPath();
+                ctx.moveTo(pt1.x, pt1.y); ctx.lineTo(pt2.x, pt2.y); ctx.lineTo(pt3.x, pt3.y); ctx.lineTo(pt4.x, pt4.y);
+                ctx.closePath(); ctx.fill();
+            }
+
+            // Marcaciones del terreno de juego
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.lineWidth = 2.5;
+
+            let fTL = project3D(-fieldL, 0, -fieldW, cX, cV, cY, cZ, fov);
+            let fTR = project3D(fieldL, 0, -fieldW, cX, cV, cY, cZ, fov);
+            let fBR = project3D(fieldL, 0, fieldW, cX, cV, cY, cZ, fov);
+            let fBL = project3D(-fieldL, 0, fieldW, cX, cV, cY, cZ, fov);
+
+            ctx.beginPath();
+            ctx.moveTo(fTL.x, fTL.y); ctx.lineTo(fTR.x, fTR.y); ctx.lineTo(fBR.x, fBR.y); ctx.lineTo(fBL.x, fBL.y);
+            ctx.closePath(); ctx.stroke();
+
+            // Área grande
+            let boxTL = project3D(-fieldL, 0, -100, cX, cV, cY, cZ, fov);
+            let boxTR = project3D(-140, 0, -100, cX, cV, cY, cZ, fov);
+            let boxBR = project3D(-140, 0, 100, cX, cV, cY, cZ, fov);
+            let boxBL = project3D(-fieldL, 0, 100, cX, cV, cY, cZ, fov);
+
+            ctx.beginPath(); ctx.moveTo(boxTL.x, boxTL.y); ctx.lineTo(boxTR.x, boxTR.y); ctx.lineTo(boxBR.x, boxBR.y); ctx.lineTo(boxBL.x, boxBL.y); ctx.stroke();
+
+            // Portería blanca
+            if(cV < 88) {
+                let pLB = project3D(-fieldL, 0, -32, cX, cV, cY, cZ, fov);
+                let pLT = project3D(-fieldL, 34, -32, cX, cV, cY, cZ, fov);
+                let pRB = project3D(-fieldL, 0, 32, cX, cV, cY, cZ, fov);
+                let pRT = project3D(-fieldL, 34, 32, cX, cV, cY, cZ, fov);
+
+                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(pLB.x, pLB.y); ctx.lineTo(pLT.x, pLT.y); ctx.lineTo(pRT.x, pRT.y); ctx.lineTo(pRB.x, pRB.y); ctx.stroke();
+            }
+
+            // --- 3. RENDERING DE PLANOS TECNOLÓGICOS DEL VAR ---
+            let laserPulse = 0.16 + Math.sin(animationTime * 0.1) * 0.04;
+            
+            // Plano rojo de fuera de juego interactivo
+            if (pX > dX) {
+                ctx.fillStyle = `rgba(239, 68, 68, ${laserPulse})`; 
+                let r1 = project3D(dX, 0, -fieldW, cX, cV, cY, cZ, fov);
+                let r2 = project3D(fieldL, 0, -fieldW, cX, cV, cY, cZ, fov);
+                let r3 = project3D(fieldL, 0, fieldW, cX, cV, cY, cZ, fov);
+                let r4 = project3D(dX, 0, fieldW, cX, cV, cY, cZ, fov);
+
+                ctx.beginPath();
+                ctx.moveTo(r1.x, r1.y); ctx.lineTo(r2.x, r2.y); ctx.lineTo(r3.x, r3.y); ctx.lineTo(r4.x, r4.y);
+                ctx.closePath(); ctx.fill();
+            }
+
+            // Línea azul técnica amarrada al Defensa movible
+            let dLineF = project3D(dX, 0, -fieldW, cX, cV, cY, cZ, fov);
+            let dLineN = project3D(dX, 0, fieldW, cX, cV, cY, cZ, fov);
+            ctx.strokeStyle = '#06b6d4'; ctx.lineWidth = 3.5;
+            ctx.beginPath(); ctx.moveTo(dLineF.x, dLineF.y); ctx.lineTo(dLineN.x, dLineN.y); ctx.stroke();
+
+            // Línea guía parpadeante del Atacante
+            let pLineF = project3D(pX, 0, -fieldW, cX, cV, cY, cZ, fov);
+            let pLineN = project3D(pX, 0, fieldW, cX, cV, cY, cZ, fov);
+            ctx.strokeStyle = (pX > dX) ? '#ef4444' : '#22c55e';
+            ctx.lineWidth = 3; ctx.setLineDash([8, 4]);
+            ctx.beginPath(); ctx.moveTo(pLineF.x, pLineF.y); ctx.lineTo(pLineN.x, pLineN.y); ctx.stroke();
+            ctx.setLineDash([]); 
+
+            // --- 4. RENDERIZADO FINAL DE MANIQUÍS ---
+            // Defensa (Se posiciona en dX dinámico)
+            drawMannequin(dX, 0, 20, '#38bdf8', "DEFENSA", false, cX, cV, cY, cZ, fov);
+
+            // Delantero Atacante
+            let colorStriker = (pX > dX) ? '#f87171' : '#fbbf24';
+            drawMannequin(pX, 0, -20, colorStriker, "DELANTERO", true, cX, cV, cY, cZ, fov);
+
+            requestAnimationFrame(frame);
+        }
+
+        // Preset de calibración perfecta
+        document.getElementById('btnPreset').addEventListener('click', () => {
+            inputX.value = 90;
+            inputVAngle.value = 12;
+            inputY.value = 95;
+            inputZ.value = 420;
+            inputFov.value = 32;
+        });
+
+        frame();
+    </script>
+</body>
+</html>
